@@ -3,13 +3,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'home_page.dart';
 import 'login_page.dart';
 import 'welcome_page.dart';
 import 'features_page.dart';
 import 'crops_page.dart';
-import 'dashboard.dart';
 import 'firebase_options.dart';
-import 'Otplogin.dart'; // ✅ Import OTP login screen
+import 'Otplogin.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,23 +22,21 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  /// ✅ Decide the next page based on auth + preferences
   Future<Widget> _getNextPage(User? user) async {
     if (user == null) return const LoginPage();
 
     final prefs = await SharedPreferences.getInstance();
     final seenWelcome = prefs.getBool("seenWelcome") ?? false;
     final seenFeatures = prefs.getBool("seenFeatures") ?? false;
-    final selectedCrop = prefs.getString("selectedCrop");
+    final selectedCrops = prefs.getStringList("selectedCrops");
 
     if (!seenWelcome) return const WelcomePage();
     if (!seenFeatures) return const FeaturesPage();
-    if (selectedCrop == null || selectedCrop.isEmpty) {
+    if (selectedCrops == null || selectedCrops.isEmpty) {
       return const CropSelectionPage();
     }
 
-    // ✅ Wrap single crop in a list
-    return DashboardPage(crops: [selectedCrop]);
+    return HomePage(crops: selectedCrops);
   }
 
   @override
@@ -78,15 +76,17 @@ class MyApp extends StatelessWidget {
         "/features": (context) => const FeaturesPage(),
         "/crops": (context) => const CropSelectionPage(),
         "/dashboard": (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map?;
-          final crop = args?["crop"];
-          if (crop == null) return const CropSelectionPage();
-
-          // ✅ Always wrap crop into a list
-          return DashboardPage(crops: [crop]);
+          // This route is less likely to be used directly, but we can try to get crops.
+          // A better approach would be to manage this with a state management solution.
+          return FutureBuilder<SharedPreferences>(
+            future: SharedPreferences.getInstance(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const LoadingScreen();
+              final crops = snapshot.data!.getStringList('selectedCrops') ?? [];
+              return HomePage(crops: crops);
+            },
+          );
         },
-
-        // ✅ OTP route
         "/otp": (context) => const PhoneLoginPage(),
       },
     );

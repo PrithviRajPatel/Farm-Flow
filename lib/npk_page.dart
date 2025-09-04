@@ -1,10 +1,10 @@
-
 import 'dart:math';
+import 'package:farm_flow/soil_analysis_page.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
 class NpkPage extends StatefulWidget {
-  NpkPage({Key? key}) : super(key: key);
+  const NpkPage({super.key});
 
   @override
   State<NpkPage> createState() => _NpkPageState();
@@ -31,13 +31,13 @@ class _NpkPageState extends State<NpkPage> {
   }
 
   Future<void> _showManualInputDialog() async {
-    final _formKey = GlobalKey<FormState>();
+    final formKey = GlobalKey<FormState>();
     final TextEditingController nController =
-    TextEditingController(text: nitrogen.toString());
+        TextEditingController(text: nitrogen.toString());
     final TextEditingController pController =
-    TextEditingController(text: phosphorus.toString());
+        TextEditingController(text: phosphorus.toString());
     final TextEditingController kController =
-    TextEditingController(text: potassium.toString());
+        TextEditingController(text: potassium.toString());
 
     return showDialog<void>(
       context: context,
@@ -45,7 +45,7 @@ class _NpkPageState extends State<NpkPage> {
         return AlertDialog(
           title: const Text('Manual NPK Input'),
           content: Form(
-            key: _formKey,
+            key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
@@ -104,7 +104,7 @@ class _NpkPageState extends State<NpkPage> {
             TextButton(
               child: const Text('Save'),
               onPressed: () {
-                if (_formKey.currentState!.validate()) {
+                if (formKey.currentState!.validate()) {
                   setState(() {
                     nitrogen = double.parse(nController.text);
                     phosphorus = double.parse(pController.text);
@@ -130,7 +130,7 @@ class _NpkPageState extends State<NpkPage> {
       // PlatformFile file = result.files.first;
       // Here you can process the file, for now we just show a snackbar
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('File uploaded successfully! (simulation)')),
+        const SnackBar(content: Text('File uploaded successfully! (simulation)')),
       );
       // For demonstration, let's update NPK values randomly after "upload"
       _generateRandomValues();
@@ -143,7 +143,20 @@ class _NpkPageState extends State<NpkPage> {
     // Simulate fetching data from an IoT sensor by generating random values
     _generateRandomValues();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Fetched data from IoT sensor (simulation)')),
+      const SnackBar(content: Text('Fetched data from IoT sensor (simulation)')),
+    );
+  }
+
+  void _navigateToAnalysis() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SoilAnalysisPage(
+          initialN: nitrogen,
+          initialP: phosphorus,
+          initialK: potassium,
+        ),
+      ),
     );
   }
 
@@ -151,7 +164,7 @@ class _NpkPageState extends State<NpkPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Dashboard"),
+        title: const Text("NPK Dashboard"),
         backgroundColor: Colors.green,
         actions: [
           IconButton(
@@ -226,7 +239,7 @@ class _NpkPageState extends State<NpkPage> {
               Text(
                 value.toInt().toString(),
                 style:
-                const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -282,7 +295,7 @@ class _NpkPageState extends State<NpkPage> {
             Text(title,
                 textAlign: TextAlign.center,
                 style:
-                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 5),
             Text(subtitle,
                 textAlign: TextAlign.center,
@@ -300,61 +313,31 @@ class _NpkPageState extends State<NpkPage> {
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
               "AI Recommendation",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
-            ..._getRecommendations(),
+            const Text(
+              "Get a detailed analysis of your soil data and customized recommendations.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _navigateToAnalysis,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                textStyle: const TextStyle(fontSize: 18, color: Colors.white),
+              ),
+              child: const Text('Get Detailed Analysis'),
+            ),
           ],
         ),
-      ),
-    );
-  }
-
-  List<Widget> _getRecommendations() {
-    List<Widget> recommendations = [];
-    if (nitrogen < 40) {
-      recommendations.add(_buildRecommendationItem("Nitrogen Low", "Apply Urea"));
-    }
-    if (phosphorus < 25) {
-      recommendations.add(_buildRecommendationItem("Phosphorus Deficient", "Apply DAP"));
-    }
-    if (potassium < 40) {
-      recommendations.add(_buildRecommendationItem("Potassium Low", "Apply MOP"));
-    }
-
-    if(recommendations.isEmpty){
-      recommendations.add(
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8.0),
-          child: Text(
-            "Soil nutrients are balanced.",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-          ),
-        ),
-      );
-    }
-
-    return recommendations;
-  }
-
-
-  Widget _buildRecommendationItem(String condition, String action) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        children: [
-          const Icon(Icons.circle, size: 10, color: Colors.green),
-          const SizedBox(width: 10),
-          Text(condition, style: const TextStyle(fontSize: 16)),
-          const Text(" → ", style: TextStyle(fontSize: 16)),
-          Text(action,
-              style:
-              const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ],
       ),
     );
   }

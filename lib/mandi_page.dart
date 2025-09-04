@@ -144,7 +144,7 @@ class _MandiPageState extends State<MandiPage> {
                 children: [
                   if (availableCrops.isNotEmpty)
                     DropdownButtonFormField<String>(
-                      value: selectedCrop,
+                      initialValue: selectedCrop,
                       hint: const Text("Select Crop"),
                       items: availableCrops
                           .map((crop) => DropdownMenuItem(

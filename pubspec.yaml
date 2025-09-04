@@ -1,7 +1,6 @@
 name: farm_flow
 description: "A new Flutter project."
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
@@ -35,6 +34,9 @@ dependencies:
   # ✅ Cloud Firestore
   cloud_firestore: ^5.6.12
 
+  # ✅ Firebase Messaging
+  firebase_messaging: ^15.0.0
+
   # ✅ Intl (date formatting, numbers, etc.)
   intl: ^0.19.0
 
@@ -49,6 +51,7 @@ dependencies:
 
   # ✅ OTP input fields
   pin_code_fields: ^8.0.1
+  image_picker: ^1.2.0
 
 dev_dependencies:
   flutter_test:

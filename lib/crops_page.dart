@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dashboard.dart';
+import 'home_page.dart';
 import 'login_page.dart'; // ✅ Import LoginPage
 
 class CropSelectionPage extends StatefulWidget {
@@ -66,7 +66,7 @@ class _CropSelectionPageState extends State<CropSelectionPage> {
             context,
             MaterialPageRoute(
               builder: (context) =>
-                  DashboardPage(crops: selectedCrops), // ✅ multiple crops
+                  HomePage(crops: selectedCrops), // ✅ multiple crops
             ),
           );
         }

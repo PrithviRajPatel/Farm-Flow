@@ -1,136 +1,75 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:geolocator/geolocator.dart';
-import 'package:farm_flow/location_service.dart';
+import 'package:farm_flow/services/weather_service.dart';
 
 class IrrigationPage extends StatefulWidget {
   const IrrigationPage({super.key});
 
   @override
-  _IrrigationPageState createState() => _IrrigationPageState();
+  State<IrrigationPage> createState() => _IrrigationPageState();
 }
 
 class _IrrigationPageState extends State<IrrigationPage> {
-  final String _openWeatherApiKey = "296923fadda6cb9bd560d4e8288ec552";
-  final String _nasaApiKey = "6yBIlI2XSXRu18s37nMcypJ4LPR2Z3Tr3scqjsD1";
-  final String _tomorrowApiKey = "YzWGCyy3iIjeBa2e0zDFgGbqmJbBiopq";
-
-  String _city = "Delhi";
-  Position? _currentPosition;
-  Map<String, dynamic>? _openWeatherData;
-  Map<String, dynamic>? _nasaPowerData;
-  Map<String, dynamic>? _tomorrowData;
+  final WeatherService _weatherService = WeatherService();
+  Map<String, dynamic>? _weatherData;
+  bool _isLoading = true;
+  String? _errorMessage;
   String? _recommendation;
-
-  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchAllData();
+    _fetchWeatherData();
   }
 
-  Future<void> _fetchAllData() async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchWeatherData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
-      // ✅ Use LocationService
-      _currentPosition = await LocationService().getCurrentLocation();
-
-      if (_currentPosition != null) {
-        final openWeatherData = await _fetchOpenWeatherData();
-        final nasaPowerData = await _fetchNasaPowerData();
-        final tomorrowData = await _fetchTomorrowData();
-
-        setState(() {
-          _openWeatherData = openWeatherData;
-          _nasaPowerData = nasaPowerData;
-          _tomorrowData = tomorrowData;
-          if (openWeatherData != null) {
-            _city = openWeatherData['name'];
-          }
-          _generateRecommendation(openWeatherData, tomorrowData);
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
-      }
+      final data = await _weatherService.fetchAllWeatherData();
+      setState(() {
+        _weatherData = data;
+        _generateIrrigationRecommendation();
+        _isLoading = false;
+      });
     } catch (e) {
-      print("Error fetching data: $e");
-      setState(() => _isLoading = false);
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
     }
   }
 
-  Future<Map<String, dynamic>?> _fetchOpenWeatherData() async {
-    if (_currentPosition == null) return null;
-    final lat = _currentPosition!.latitude;
-    final lon = _currentPosition!.longitude;
-
-    final url =
-        'https://api.openweathermap.org/data/2.5/weather?lat=$lat&lon=$lon&appid=$_openWeatherApiKey&units=metric';
-    final response = await http.get(Uri.parse(url));
-
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    return null;
-  }
-
-  Future<Map<String, dynamic>?> _fetchNasaPowerData() async {
-    if (_currentPosition == null) return null;
-    final lat = _currentPosition!.latitude;
-    final lon = _currentPosition!.longitude;
-
-    final endDate = DateTime.now();
-    final startDate = endDate.subtract(const Duration(days: 7));
-
-    final url =
-        'https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M,RH2M&community=AG&longitude=$lon&latitude=$lat&start=${startDate.year}${startDate.month.toString().padLeft(2, '0')}${startDate.day.toString().padLeft(2, '0')}&end=${endDate.year}${endDate.month.toString().padLeft(2, '0')}${endDate.day.toString().padLeft(2, '0')}&format=JSON&api_key=$_nasaApiKey';
-    final response = await http.get(Uri.parse(url));
-
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    return null;
-  }
-
-  Future<Map<String, dynamic>?> _fetchTomorrowData() async {
-    if (_currentPosition == null) return null;
-    final lat = _currentPosition!.latitude;
-    final lon = _currentPosition!.longitude;
-
-    final url =
-        'https://api.tomorrow.io/v4/weather/realtime?location=$lat,$lon&apikey=$_tomorrowApiKey';
-    final response = await http.get(Uri.parse(url));
-
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    return null;
-  }
-
-  void _generateRecommendation(
-      Map<String, dynamic>? openWeatherData, Map<String, dynamic>? tomorrowData) {
-    if (openWeatherData == null || tomorrowData == null) {
-      _recommendation =
-      "Could not fetch all weather data to make a recommendation.";
+  void _generateIrrigationRecommendation() {
+    if (_weatherData == null) {
+      _recommendation = 'Could not fetch weather data to make a recommendation.';
       return;
     }
 
-    final temp = openWeatherData['main']['temp'];
-    final humidity = openWeatherData['main']['humidity'];
-    final precipitation =
-        tomorrowData['data']['values']['precipitationIntensity'] ?? 0;
+    final openWeather = _weatherData!['openWeather'];
+    final tomorrow = _weatherData!['tomorrow'];
+    final nasaPower = _weatherData!['nasaPower'];
 
-    if (precipitation > 0) {
-      _recommendation = "It has rained recently. No need to irrigate.";
+    if (openWeather == null || tomorrow == null || nasaPower == null) {
+      _recommendation = 'Incomplete weather data. Cannot generate a precise recommendation.';
+      return;
+    }
+
+    final temp = openWeather['main']?['temp'] ?? 0.0;
+    final humidity = openWeather['main']?['humidity'] ?? 0.0;
+    final precip = tomorrow['timelines']?['daily']?[0]?['values']?['precipitationProbabilityAvg'] ?? 0.0;
+    final evap = nasaPower['properties']?['parameter']?['EVAP']?.values.last ?? 0.0;
+
+    if (precip > 50) {
+      _recommendation = '🌧️ High chance of rain ($precip%). No need to irrigate.';
+    } else if (evap > 5.0) {
+      _recommendation = '☀️ High evapotranspiration ($evap). It is critical to irrigate your crops to avoid water stress.';
     } else if (temp > 30 && humidity < 40) {
-      _recommendation =
-      "High temperature and low humidity. It's a good time to irrigate your crops.";
+      _recommendation = '🔥 High temperature ($temp°C) and low humidity ($humidity%). Consider irrigating your crops soon.';
     } else {
-      _recommendation =
-      "Weather conditions are moderate. Check soil moisture for irrigation needs.";
+      _recommendation = '✅ Conditions are moderate. Check soil moisture directly for optimal irrigation timing.';
     }
   }
 
@@ -138,66 +77,118 @@ class _IrrigationPageState extends State<IrrigationPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Irrigation'),
+        title: const Text('💧 Irrigation Schedule'),
+        backgroundColor: Colors.blue.shade800,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchWeatherData,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
+          : _errorMessage != null
+              ? Center(child: Text('Error: $_errorMessage'))
+              : _weatherData == null
+                  ? const Center(child: Text('No data available.'))
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            '📍 Location: ${_weatherData!['city']}',
+                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 20),
+                          _buildRecommendationCard(),
+                          const SizedBox(height: 20),
+                          _buildDetailedWeatherCards(),
+                        ],
+                      ),
+                    ),
+    );
+  }
+
+  Widget _buildRecommendationCard() {
+    return Card(
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            const Text(
+              '💡 AI Recommendation',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _recommendation ?? 'No recommendation available.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18, color: Colors.blue.shade800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailedWeatherCards() {
+    return Column(
+      children: [
+        _buildWeatherDetailCard(
+          title: 'Short-Term Forecast',
+          icon: Icons.wb_sunny,
+          data: {
+            'Temperature': '${_weatherData!['openWeather']?['main']?['temp'] ?? 'N/A'}°C',
+            'Humidity': '${_weatherData!['openWeather']?['main']?['humidity'] ?? 'N/A'}%',
+            'Rain Chance': '${_weatherData!['tomorrow']?['timelines']?['daily']?[0]?['values']?['precipitationProbabilityAvg'] ?? 'N/A'}%',
+          },
+        ),
+        const SizedBox(height: 16),
+        _buildWeatherDetailCard(
+          title: 'Scientific Model Data',
+          icon: Icons.science,
+          data: {
+            'Evapotranspiration': '${_weatherData!['nasaPower']?['properties']?['parameter']?['EVAP']?.values.last ?? 'N/A'} mm/day',
+            'Solar Radiation': '${_weatherData!['nasaPower']?['properties']?['parameter']?['ALLSKY_SFC_SW_DWN']?.values.last ?? 'N/A'} kWh/m^2/day',
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWeatherDetailCard({required String title, required IconData icon, required Map<String, String> data}) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Location: $_city',
-                style: Theme.of(context).textTheme.headlineSmall),
-            if (_recommendation != null)
-              Card(
-                color: Colors.blue.shade100,
-                child: ListTile(
-                  leading: Icon(Icons.lightbulb_outline,
-                      color: Colors.blue.shade900),
-                  title: Text('Recommendation',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade900)),
-                  subtitle: Text(_recommendation!,
-                      style: TextStyle(color: Colors.blue.shade800)),
-                ),
+            Row(
+              children: [
+                Icon(icon, color: Colors.blue.shade700, size: 28),
+                const SizedBox(width: 10),
+                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const Divider(height: 20, thickness: 1),
+            ...data.entries.map((entry) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(entry.key, style: const TextStyle(fontSize: 16)),
+                  Text(entry.value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                ],
               ),
-            if (_openWeatherData != null)
-              Card(
-                child: ListTile(
-                  title: const Text('OpenWeather'),
-                  subtitle: Text(
-                      'Temperature: ${_openWeatherData!['main']['temp']}°C\n'
-                          'Humidity: ${_openWeatherData!['main']['humidity']}%'),
-                ),
-              ),
-            if (_tomorrowData != null)
-              Card(
-                child: ListTile(
-                  title: const Text('Tomorrow.io'),
-                  subtitle: Text(
-                      'Temperature: ${_tomorrowData!['data']['values']['temperature']}°C\n'
-                          'Humidity: ${_tomorrowData!['data']['values']['humidity']}%'),
-                ),
-              ),
-            if (_nasaPowerData != null)
-              Card(
-                child: ExpansionTile(
-                  title: const Text('NASA POWER Data (Last 7 days)'),
-                  children: [
-                    for (final entry in _nasaPowerData!['properties']
-                    ['parameter']['T2M']
-                        .entries)
-                      ListTile(
-                        title: Text('Date: ${entry.key}'),
-                        subtitle: Text(
-                            'Temperature: ${entry.value}°C\n'
-                                'Humidity: ${_nasaPowerData!['properties']['parameter']['RH2M'][entry.key]}%'),
-                      )
-                  ],
-                ),
-              ),
+            )),
           ],
         ),
       ),

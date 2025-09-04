@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'package:farm_flow/services/weather_service.dart';
 
 class WeatherPage extends StatefulWidget {
-  final String? crop; // ✅ accept crop from dashboard
+  final String? crop;
 
   const WeatherPage({super.key, this.crop});
 
@@ -12,67 +11,34 @@ class WeatherPage extends StatefulWidget {
 }
 
 class _WeatherPageState extends State<WeatherPage> {
-  String city = "Delhi";
-  String apiKey = "86976125e888ae5d3c3d358a0724306a"; // 🔑 Replace with your OpenWeather API key
-  Map<String, dynamic>? weatherData;
-  String? weatherAlert;
-  bool isLoading = false;
+  final WeatherService _weatherService = WeatherService();
+  Map<String, dynamic>? _weatherData;
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    fetchWeather();
+    _fetchWeatherData();
   }
 
-  Future<void> fetchWeather() async {
-    setState(() => isLoading = true);
+  Future<void> _fetchWeatherData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      final response = await http.get(Uri.parse(
-          "https://api.openweathermap.org/data/2.5/weather?q=$city&appid=$apiKey&units=metric"));
-
-      if (response.statusCode == 200) {
-        setState(() {
-          weatherData = json.decode(response.body);
-          weatherAlert = getWeatherAlert(weatherData!);
-          isLoading = false;
-        });
-      } else {
-        setState(() {
-          weatherData = null;
-          isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("⚠️ Couldn’t fetch weather for $city")),
-        );
-      }
+      final data = await _weatherService.fetchAllWeatherData();
+      setState(() {
+        _weatherData = data;
+        _isLoading = false;
+      });
     } catch (e) {
-      setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Error fetching weather data")),
-      );
-    }
-  }
-
-  String? getWeatherAlert(Map<String, dynamic> data) {
-    final condition = data["weather"][0]["main"].toString().toLowerCase();
-    if (condition.contains("rain")) {
-      return "🌧️ Rain expected. Protect your crops!";
-    } else if (condition.contains("storm")) {
-      return "⛈️ Storm alert. Take precautions!";
-    } else if (condition.contains("heat")) {
-      return "🔥 High temperature! Ensure crops are watered.";
-    }
-    return null;
-  }
-
-  String getFarmerTip() {
-    if (weatherAlert != null) {
-      return "⚠️ Based on current weather, take preventive measures for your farm.";
-    } else {
-      if (widget.crop != null) {
-        return "✅ Weather looks good for growing ${widget.crop}. Continue regular farming practices.";
-      }
-      return "✅ Weather is good. Continue regular farming practices.";
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
     }
   }
 
@@ -80,121 +46,40 @@ class _WeatherPageState extends State<WeatherPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.crop != null
-            ? "🌦 Weather - ${widget.crop}"
-            : "🌦 Weather Updates"),
+        title: Text(widget.crop != null ? '🌦 Weather - ${widget.crop}' : '🌦 Weather Updates'),
         backgroundColor: Colors.green,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: fetchWeather,
-          )
+            onPressed: _fetchWeatherData,
+          ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // 🔍 City Search Box
-            TextField(
-              decoration: InputDecoration(
-                labelText: "Enter City",
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onSubmitted: (value) {
-                if (value.isNotEmpty) {
-                  setState(() => city = value);
-                  fetchWeather();
-                }
-              },
-            ),
-            const SizedBox(height: 20),
-
-            // 📊 Weather Info
-            Expanded(
-              child: isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : weatherData == null
-                  ? const Center(
-                child: Text("❌ No weather data available"),
-              )
-                  : ListView(
-                children: [
-                  _buildWeatherCard(
-                    "📍 City",
-                    city,
-                    Icons.location_on,
-                    Colors.blue,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildWeatherCard(
-                    "🌡 Temperature",
-                    "${weatherData!["main"]["temp"]}°C",
-                    Icons.thermostat,
-                    Colors.red,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildWeatherCard(
-                    "☁ Condition",
-                    weatherData!["weather"][0]["main"],
-                    Icons.cloud,
-                    Colors.grey,
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // ⚠ Weather Alert
-                  if (weatherAlert != null)
-                    Card(
-                      color: Colors.red[100],
-                      elevation: 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          weatherAlert!,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? Center(child: Text('Error: $_errorMessage'))
+              : _weatherData == null
+                  ? const Center(child: Text('No weather data available.'))
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildWeatherCard('📍 City', _weatherData!['city'], Icons.location_on, Colors.blue),
+                          const SizedBox(height: 16),
+                          _buildOpenWeatherCard(_weatherData!['openWeather']),
+                          const SizedBox(height: 16),
+                          _buildTomorrowIoCard(_weatherData!['tomorrow']),
+                          const SizedBox(height: 16),
+                          _buildNasaPowerCard(_weatherData!['nasaPower']),
+                        ],
                       ),
                     ),
-
-                  const SizedBox(height: 20),
-
-                  // 👨‍🌾 Farmer Tip
-                  Card(
-                    color: Colors.green[100],
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        getFarmerTip(),
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
-  // ✅ Reusable card builder
-  Widget _buildWeatherCard(
-      String title, String value, IconData icon, Color color) {
+  Widget _buildWeatherCard(String title, String value, IconData icon, Color color) {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -206,11 +91,84 @@ class _WeatherPageState extends State<WeatherPage> {
             const SizedBox(width: 16),
             Expanded(
               child: Text(
-                "$title: $value",
-                style:
-                const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                '$title: $value',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOpenWeatherCard(Map<String, dynamic>? data) {
+    if (data == null) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Current Weather (OpenWeatherMap)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Text('Temperature: ${data['main']['temp']}°C'),
+            Text('Condition: ${data['weather'][0]['main']}'),
+            Text('Humidity: ${data['main']['humidity']}%'),
+            Text('Wind Speed: ${data['wind']['speed']} m/s'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTomorrowIoCard(Map<String, dynamic>? data) {
+    if (data == null) return const SizedBox.shrink();
+
+    // Simplified representation of forecast
+    final forecast = data['timelines']?['daily']?[0]?['values'];
+    if (forecast == null) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Short-term Forecast (Tomorrow.io)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Text('Max Temperature: ${forecast['temperatureMax']}°C'),
+            Text('Min Temperature: ${forecast['temperatureMin']}°C'),
+            Text('Precipitation: ${forecast['precipitationProbabilityAvg']}%'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNasaPowerCard(Map<String, dynamic>? data) {
+    if (data == null) return const SizedBox.shrink();
+
+    // Simplified representation of NASA POWER data
+    final properties = data['properties']?['parameter'];
+    if (properties == null) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Long-term Data (NASA POWER)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Text('Evapotranspiration: ${properties['EVAP']?.values.last ?? 'N/A'}'),
+            Text('Solar Radiation: ${properties['ALLSKY_SFC_SW_DWN']?.values.last ?? 'N/A'}'),
           ],
         ),
       ),
